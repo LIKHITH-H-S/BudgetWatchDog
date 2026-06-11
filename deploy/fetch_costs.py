@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import boto3
-from datetime import datetime, timedelta
+from datetime import datetime
 from config import TEAMS, BUDGET_LIMITS, USE_MOCK_DATA
 
 

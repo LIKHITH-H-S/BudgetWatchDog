@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import boto3
-from datetime import datetime, timedelta
+from datetime import datetime
 from config import TEAMS, BUDGET_LIMITS, USE_MOCK_DATA
 
 
@@ -30,7 +30,7 @@ def get_mock_costs():
 
 def fetch_costs():
     if USE_MOCK_DATA:
-        print("⚠️  Running in MOCK mode (no real AWS data)\n")
+        print("Running in MOCK mode (no real AWS data)\n")
         results = get_mock_costs()
     else:
         client = boto3.client("ce", region_name="us-east-1")
