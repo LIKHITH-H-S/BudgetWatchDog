@@ -19,7 +19,7 @@ BUDGET_LIMITS = {
 }
 
 # SNS Topic ARN
-SNS_TOPIC_ARN = "arn:aws:sns:ap-south-1:114030601216:BudgetWatchdogAlerts"
+SNS_TOPIC_ARN = "arn:aws:sns:ap-south-1:114030601216:BudgetWatchdogAlertsV2"
 
 # IAM Groups
 TEAM_IAM_GROUPS = {

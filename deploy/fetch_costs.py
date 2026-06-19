@@ -30,7 +30,7 @@ def get_mock_costs():
 
 def fetch_costs():
     if USE_MOCK_DATA:
-        print("⚠️  Running in MOCK mode (no real AWS data)\n")
+        print("Running in MOCK mode (no real AWS data)\n")
         results = get_mock_costs()
     else:
         client = boto3.client("ce", region_name="us-east-1")
