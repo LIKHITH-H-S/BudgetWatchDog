@@ -1,9 +1,9 @@
 # detect_anomaly.py
 # Takes cost data and figures out WHO is in trouble and HOW BAD it is
-
+from config import SPIKE_THRESHOLD_PERCENT
 # ── CONFIGURATION ──────────────────────────────────────────
 # If cost spikes by more than this % compared to last month → anomaly
-SPIKE_THRESHOLD_PERCENT = 20   # 20% sudden increase = suspicious
+  # 20% sudden increase = suspicious
 
 # Severity levels
 SEVERITY_WARNING  = "WARNING"   # close to limit or small spike
@@ -13,7 +13,7 @@ SEVERITY_CRITICAL = "CRITICAL"  # over limit or huge spike
 
 # Mock "last month's costs" so we can simulate spikes
 # In real life this would also come from Cost Explorer
-LAST_MONTH_COSTS = {
+PREVIOUS_CHECK_COSTS = {
     "team-alpha": 68.00,
     "team-beta":  190.00,
     "team-gamma": 80.00,   # team-gamma doubled! big spike
@@ -35,7 +35,7 @@ def detect_anomalies(cost_results):
         limit   = team_data["limit"]
         exceeded = team_data["exceeded"]
 
-        last_month = LAST_MONTH_COSTS.get(team, cost)  # fallback to current if no history
+        previous_cost = PREVIOUS_CHECK_COSTS.get(team, cost)
 
         # ── CHECK 1: Over budget limit? ──────────────────
         if exceeded:
@@ -52,8 +52,8 @@ def detect_anomalies(cost_results):
             })
 
         # ── CHECK 2: Sudden spike vs last month? ─────────
-        if last_month > 0:
-            spike_pct = ((cost - last_month) / last_month) * 100
+        if previous_cost > 0:
+            spike_pct = ((cost - previous_cost) / previous_cost) * 100
 
             if spike_pct > SPIKE_THRESHOLD_PERCENT:
                 severity = SEVERITY_CRITICAL if spike_pct > 50 else SEVERITY_WARNING
@@ -62,7 +62,7 @@ def detect_anomalies(cost_results):
                     "team":     team,
                     "type":     "SPIKE_DETECTED",
                     "severity": severity,
-                    "message":  f"Cost jumped {spike_pct:.1f}% vs last month (${last_month} → ${cost})",
+                    "message":  f"Cost increased {spike_pct:.1f}% since the previous monitoring cycle (${previous_cost} → ${cost})",
                     "cost":     cost,
                     "limit":    limit,
                 })
