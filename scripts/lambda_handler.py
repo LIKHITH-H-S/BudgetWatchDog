@@ -9,7 +9,7 @@ from datetime import datetime
 from fetch_costs    import fetch_costs
 from detect_anomaly import detect_anomalies, print_anomalies
 from send_alert     import send_alert
-from enforce_limit  import enforce_limit
+from enforce_limit import manage_team_access
 
 
 def handler(event, context):
@@ -52,7 +52,7 @@ def handler(event, context):
     # ── STEP 4: Enforce limits ───────────────────────
     print("\n🔒 STEP 4: Enforcing limits...\n")
     try:
-        enforce_limit(anomalies)
+        manage_team_access(cost_data, anomalies)
     except Exception as e:
         print(f"❌ Failed to enforce limits: {e}")
         return build_response(500, "Failed at enforcement")

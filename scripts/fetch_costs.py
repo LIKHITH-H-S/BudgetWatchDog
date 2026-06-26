@@ -23,7 +23,7 @@ def get_mock_costs():
     """
     return [
         {"team": "team-alpha", "cost": 72.40,  "currency": "USD", "limit": 100, "exceeded": False},
-        {"team": "team-beta",  "cost": 243.10, "currency": "USD", "limit": 200, "exceeded": True},
+        {"team": "team-beta",  "cost": 180, "currency": "USD", "limit": 200, "exceeded": True},
         {"team": "team-gamma", "cost": 167.80, "currency": "USD", "limit": 150, "exceeded": True},
     ]
 

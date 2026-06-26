@@ -9,7 +9,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import boto3
 import json
 from botocore.exceptions import ClientError
-from config import TEAM_IAM_GROUPS, USE_MOCK_ENFORCE
+from config import (
+    TEAM_IAM_GROUPS,
+    USE_MOCK_ENFORCE,
+    DENY_POLICY_ARN
+)
 
 # Name of the policy we attach to restrict a team
 DENY_POLICY_NAME = "BudgetWatchdog-SpendingLimitExceeded"
@@ -48,68 +52,72 @@ def build_deny_policy():
     return json.dumps(policy, indent=2)
 
 
-def enforce_limit(anomalies):
+def manage_team_access(cost_data, anomalies):
     """
-    For every CRITICAL anomaly, attaches the deny policy
-    to that team's IAM group — blocking new resource creation.
+    Automatically manages IAM access.
+
+    CRITICAL team  -> Attach deny policy
+    Normal team    -> Remove deny policy
     """
-    # Only enforce on CRITICAL anomalies, not warnings
-    critical = [a for a in anomalies if a["severity"] == "CRITICAL"]
 
-    if not critical:
-        print("✅ No critical anomalies — no enforcement needed.")
-        return
+    # Build a set of teams that currently have a CRITICAL anomaly
+    critical_teams = {
+        anomaly["team"]
+        for anomaly in anomalies
+        if anomaly["severity"] == "CRITICAL"
+    }
 
-    print(f"🔒 Enforcing limits for {len(critical)} critical team(s)...\n")
+    print("\n🔒 Managing team access...\n")
 
-    for anomaly in critical:
-        team      = anomaly["team"]
+    for team_info in cost_data:
+
+        team = team_info["team"]
         iam_group = TEAM_IAM_GROUPS.get(team)
 
         if not iam_group:
-            print(f"  ⚠️  No IAM group mapped for {team} — skipping")
+            print(f"⚠️ No IAM group mapped for {team}")
             continue
 
+        # ---------------- MOCK MODE ----------------
         if USE_MOCK_ENFORCE:
-            print(f"  ⚠️  MOCK MODE — would restrict: {iam_group}")
-            print(f"      Reason: {anomaly['message']}")
-            print(f"      Action: Attach '{DENY_POLICY_NAME}' policy to {iam_group}")
-            print(f"      Effect: Team cannot create new EC2, RDS, Lambda, S3\n")
+
+            if team in critical_teams:
+                print(f"MOCK: Would restrict {iam_group}")
+            else:
+                print(f"MOCK: Would restore {iam_group}")
+
             continue
 
-        # Real IAM enforcement
-        try:
-            iam = boto3.client("iam")
+        # ---------------- REAL MODE ----------------
+        if team in critical_teams:
 
-            # Step 1: Create the deny policy (or get existing)
             try:
-                policy_response = iam.create_policy(
-                    PolicyName=DENY_POLICY_NAME,
-                    PolicyDocument=build_deny_policy(),
-                    Description="BudgetWatchdog auto-enforcement policy",
+                iam = boto3.client("iam")
+
+                attached = iam.list_attached_group_policies(
+                    GroupName=iam_group
                 )
-                policy_arn = policy_response["Policy"]["Arn"]
-                print(f"  ✅ Created policy: {policy_arn}")
+
+                already_attached = any(
+                    policy["PolicyArn"] == DENY_POLICY_ARN
+                    for policy in attached["AttachedPolicies"]
+                )
+
+                if already_attached:
+                    print(f"ℹ️ {iam_group} already restricted.")
+                else:
+                    iam.attach_group_policy(
+                        GroupName=iam_group,
+                        PolicyArn=DENY_POLICY_ARN,
+                    )
+                    print(f"🔒 Restricted {iam_group}")
 
             except ClientError as e:
-                if e.response["Error"]["Code"] == "EntityAlreadyExists":
-                    # Policy already exists — get its ARN
-                    account_id = boto3.client("sts").get_caller_identity()["Account"]
-                    policy_arn = f"arn:aws:iam::{account_id}:policy/{DENY_POLICY_NAME}"
-                    print(f"  ℹ️  Policy already exists: {policy_arn}")
-                else:
-                    raise
+                print(f"❌ Failed to restrict {team}: {e}")
 
-            # Step 2: Attach the policy to the team's IAM group
-            iam.attach_group_policy(
-                GroupName=iam_group,
-                PolicyArn=policy_arn,
-            )
-            print(f"  🔒 ENFORCED: {iam_group} is now restricted")
-            print(f"      Reason: {anomaly['message']}\n")
+        else:
 
-        except ClientError as e:
-            print(f"  ❌ Failed to enforce {team}: {e}\n")
+            release_limit(team)
 
 
 def release_limit(team):
@@ -125,14 +133,25 @@ def release_limit(team):
 
     try:
         iam       = boto3.client("iam")
-        account_id = boto3.client("sts").get_caller_identity()["Account"]
-        policy_arn = f"arn:aws:iam::{account_id}:policy/{DENY_POLICY_NAME}"
+        policy_arn = DENY_POLICY_ARN
 
-        iam.detach_group_policy(
-            GroupName=iam_group,
-            PolicyArn=policy_arn,
+        attached = iam.list_attached_group_policies(
+            GroupName=iam_group
         )
-        print(f"✅ Released restrictions for {iam_group}")
+
+        already_attached = any(
+            policy["PolicyArn"] == policy_arn
+            for policy in attached["AttachedPolicies"]
+        )
+
+        if already_attached:
+            iam.detach_group_policy(
+                GroupName=iam_group,
+                PolicyArn=policy_arn,
+            )
+            print(f"✅ Released restrictions for {iam_group}")
+        else:
+            print(f"ℹ️  {iam_group} is already unrestricted.")
 
     except ClientError as e:
         print(f"❌ Failed to release {team}: {e}")
@@ -150,4 +169,4 @@ if __name__ == "__main__":
     anomalies  = detect_anomalies(cost_data)
     print()
 
-    enforce_limit(anomalies)
+    manage_team_access(cost_data, anomalies)
